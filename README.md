@@ -1,4 +1,4 @@
-# Bayesian Multi-method Occupancy Model for Oriental Pied Hornbill (OPHB)
+# Bayesian Multi-method Occupancy Model for Oriental Pied Hornbill (Anthracoceros albirostris)
 
 This repository contains R and JAGS code for fitting a **Bayesian multi-method occupancy model** to estimate species occupancy, availability, and detection probabilities. The example use case focuses on the **Oriental Pied Hornbill (Anthracoceros albirostris), integrating multiple survey methods such as passive acoustic monitoring (PAM), human observations, and BirdNET.
 
