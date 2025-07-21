@@ -1,0 +1,121 @@
+# ---------------------------------------------------------------
+   #Bayesian Single-season Multiple Method Occupancy Analysis#
+# ---------------------------------------------------------------
+
+# ---------------------------------------------------------------
+# Load required library
+# ---------------------------------------------------------------
+library(jagsUI)  # For running Bayesian models in JAGS via R
+
+# ---------------------------------------------------------------
+# Load your detection history dataset
+# ---------------------------------------------------------------
+# Prompt user to select CSV file containing detection history
+OPHB <- read.csv(file.choose(), row.names = 1)
+
+# Examine data summary
+summary(OPHB)
+
+# ---------------------------------------------------------------
+# Prepare detection history as 3D array (site x method x visit)
+# ---------------------------------------------------------------
+# Detection history is assumed to be organized with detections over 9 columns
+# across 3 methods, with repeated visits (J occasions per site-method combo)
+
+tmp <- as.matrix(OPHB[ , 1:9])  # Subset detection columns
+S <- nrow(tmp)                  # Number of sites
+M <- 3                          # Number of survey methods (e.g., observer, recorder, BirdNET)
+J <- ncol(tmp) / M              # Number of visits (occasions) per method
+DH <- array(tmp, dim = c(S, M, J))  # 3D array: site x method x visit
+
+# Check structure
+dim(DH)
+head(DH)
+
+# ---------------------------------------------------------------
+# JAGS MODEL CODE: Multi-method occupancy model
+# ---------------------------------------------------------------
+JAGSmodel <- "
+model {
+  # ----------------------------------
+  # Priors
+  # ----------------------------------
+  psi ~ dunif(0, 1)          # Site occupancy probability
+  theta ~ dunif(0, 1)        # Availability: probability species is present during a visit, if site is occupied
+
+  for (m in 1:M) {
+    p[m] ~ dunif(0, 1)       # Detection probability for each method
+  }
+
+  # ----------------------------------
+  # Latent states
+  # ----------------------------------
+  for (s in 1:S) {
+    z[s] ~ dbern(psi)        # True occupancy state at site s
+
+    for (j in 1:J) {
+      w[s, j] ~ dbern(theta * z[s])  # Availability state during visit j at site s
+    }
+  }
+
+  # ----------------------------------
+  # Likelihood
+  # ----------------------------------
+  for (s in 1:S) {
+    for (m in 1:M) {
+      for (j in 1:J) {
+        DH[s, m, j] ~ dbern(p[m] * w[s, j])  # Observed detection via method m at site s during visit j
+      }
+    }
+  }
+}
+"
+
+# Write the model string to a text file (for JAGS to read)
+writeLines(JAGSmodel, "model.txt")
+
+# ---------------------------------------------------------------
+# Prepare data, initial values, and parameter monitoring
+# ---------------------------------------------------------------
+
+# Data list to be passed into JAGS
+JAGSdata <- list(
+  S = S,         # Number of sites
+  J = J,         # Number of visits
+  M = M,         # Number of detection methods
+  DH = DH        # Detection history array
+)
+
+# Initial values for latent states z (occupancy) and w (availability)
+# Start by assuming all sites are occupied and species is always available
+inits <- function() list(
+  z = rep(1, S),
+  w = matrix(1, S, J)
+)
+
+# Parameters we want to estimate
+wanted <- c("psi", "theta", "p")
+
+# ---------------------------------------------------------------
+# Run the JAGS model
+# ---------------------------------------------------------------
+outNut <- jags(
+  data = JAGSdata,
+  inits = inits,
+  parameters.to.save = wanted,
+  model.file = "model.txt",
+  n.chains = 3,        # Number of MCMC chains
+  n.adapt = 100,       # Number of adaptive iterations for tuning
+  n.iter = 1e6,        # Total number of MCMC iterations
+  n.burnin = 1000,     # Burn-in period (discard initial samples)
+  n.thin = 1,          # Thinning rate (use every sample)
+  DIC = FALSE          # Turn off Deviance Information Criterion
+)
+
+# ---------------------------------------------------------------
+# Notes:
+# - Increasing n.iter improves precision but increases computation time.
+# - You can view results using: print(outNut) or summary(outNut)
+# - Consider using traceplots and Gelman diagnostics for convergence checking
+#   e.g., traceplot(outNut), gelman.diag(outNut)
+# ---------------------------------------------------------------
