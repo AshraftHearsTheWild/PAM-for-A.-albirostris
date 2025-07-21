@@ -1,120 +1,35 @@
-# PAM-for-A.-albirostris
-Codes and data for "Passive Acoustic Monitoring of Asian Hornbills in Borneo: A Case Study of Oriental Pied Hornbill (Anthracoceros albirostris) in the Lower Kinabatangan Wildlife Sanctuary, Sabah"
+# Bayesian Multi-method Occupancy Model for Oriental Pied Hornbill (OPHB)
 
-# ---------------------------------------------------------------
-# Load required library
-# ---------------------------------------------------------------
-library(jagsUI)  # For running Bayesian models in JAGS via R
+This repository contains R and JAGS code for fitting a **Bayesian multi-method occupancy model** to estimate species occupancy, availability, and detection probabilities. The example use case focuses on the **Oriental Pied Hornbill (Anthracoceros albirostris), integrating multiple survey methods such as passive acoustic monitoring (PAM), human observations, and BirdNET.
 
-# ---------------------------------------------------------------
-# Load your detection history dataset
-# ---------------------------------------------------------------
-# Prompt user to select CSV file containing detection history
-OPHB <- read.csv(file.choose(), row.names = 1)
+---
 
-# Examine data summary
-summary(OPHB)
+##Overview
 
-# ---------------------------------------------------------------
-# Prepare detection history as 3D array (site x method x visit)
-# ---------------------------------------------------------------
-# Detection history is assumed to be organized with detections over 9 columns
-# across 3 methods, with repeated visits (J occasions per site-method combo)
+This model separates the detection process into three stages:
 
-tmp <- as.matrix(OPHB[ , 1:9])  # Subset detection columns
-S <- nrow(tmp)                  # Number of sites
-M <- 3                          # Number of survey methods (e.g., observer, recorder, BirdNET)
-J <- ncol(tmp) / M              # Number of visits (occasions) per method
-DH <- array(tmp, dim = c(S, M, J))  # 3D array: site x method x visit
+- **Occupancy (ψ)**: The probability that a site is occupied by the species.
+- **Availability (θ)**: The probability that the species is available (e.g., vocalizing) during a survey visit, conditional on occupancy.
+- **Detection (p)**: Method-specific detection probabilities, given that the species is available.
 
-# Check structure
-dim(DH)
-head(DH)
+The model is implemented in [JAGS](http://mcmc-jags.sourceforge.net/) and run through R using the `jagsUI` package.
 
-# ---------------------------------------------------------------
-# JAGS MODEL CODE: Multi-method occupancy model
-# ---------------------------------------------------------------
-JAGSmodel <- "
-model {
-  # ----------------------------------
-  # Priors
-  # ----------------------------------
-  psi ~ dunif(0, 1)          # Site occupancy probability
-  theta ~ dunif(0, 1)        # Availability: probability species is present during a visit, if site is occupied
+---
 
-  for (m in 1:M) {
-    p[m] ~ dunif(0, 1)       # Detection probability for each method
-  }
+##Repository Contents
 
-  # ----------------------------------
-  # Latent states
-  # ----------------------------------
-  for (s in 1:S) {
-    z[s] ~ dbern(psi)        # True occupancy state at site s
+| File | Description |
+|------|-------------|
+| `multi_method_model.R` | Main R script to prepare data and run the JAGS model |
+| `model.txt` | JAGS model specification (automatically written from R) |
+| `example_data.csv` | Example detection history dataset (user-provided) |
+| `README.md` | Project documentation |
 
-    for (j in 1:J) {
-      w[s, j] ~ dbern(theta * z[s])  # Availability state during visit j at site s
-    }
-  }
+---
 
-  # ----------------------------------
-  # Likelihood
-  # ----------------------------------
-  for (s in 1:S) {
-    for (m in 1:M) {
-      for (j in 1:J) {
-        DH[s, m, j] ~ dbern(p[m] * w[s, j])  # Observed detection via method m at site s during visit j
-      }
-    }
-  }
-}
-"
+##Model Structure
 
-# Write the model string to a text file (for JAGS to read)
-writeLines(JAGSmodel, "model.txt")
-
-# ---------------------------------------------------------------
-# Prepare data, initial values, and parameter monitoring
-# ---------------------------------------------------------------
-
-# Data list to be passed into JAGS
-JAGSdata <- list(
-  S = S,         # Number of sites
-  J = J,         # Number of visits
-  M = M,         # Number of detection methods
-  DH = DH        # Detection history array
-)
-
-# Initial values for latent states z (occupancy) and w (availability)
-# Start by assuming all sites are occupied and species is always available
-inits <- function() list(
-  z = rep(1, S),
-  w = matrix(1, S, J)
-)
-
-# Parameters we want to estimate
-wanted <- c("psi", "theta", "p")
-
-# ---------------------------------------------------------------
-# Run the JAGS model
-# ---------------------------------------------------------------
-outNut <- jags(
-  data = JAGSdata,
-  inits = inits,
-  parameters.to.save = wanted,
-  model.file = "model.txt",
-  n.chains = 3,        # Number of MCMC chains
-  n.adapt = 100,       # Number of adaptive iterations for tuning
-  n.iter = 1e6,        # Total number of MCMC iterations
-  n.burnin = 1000,     # Burn-in period (discard initial samples)
-  n.thin = 1,          # Thinning rate (use every sample)
-  DIC = FALSE          # Turn off Deviance Information Criterion
-)
-
-# ---------------------------------------------------------------
-# Notes:
-# - Increasing n.iter improves precision but increases computation time.
-# - You can view results using: print(outNut) or summary(outNut)
-# - Consider using traceplots and Gelman diagnostics for convergence checking
-#   e.g., traceplot(outNut), gelman.diag(outNut)
-# ---------------------------------------------------------------
+```text
+z[s] ~ dbern(psi)                    # True occupancy state
+w[s, j] ~ dbern(theta * z[s])       # Availability during visit j
+DH[s, m, j] ~ dbern(p[m] * w[s, j]) # Observed detection by method m
