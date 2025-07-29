@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------
 
 # ---------------------------------------------------------------
-# Load required library
+# Load or installed required library
 # ---------------------------------------------------------------
 library(jagsUI)  # For running Bayesian models in JAGS via R
 
@@ -21,6 +21,8 @@ summary(OPHB)
 # ---------------------------------------------------------------
 # Detection history is assumed to be organized with detections over 9 columns
 # across 3 methods, with repeated visits (J occasions per site-method combo)
+# So, mine looks like this (1.1,1.2,1.3,2.1,2.2,2.3,3.1,3.2,3.3), the first integer (1.X,2.X,3.X) is the type of method I used,
+# while the (X.1,X.2,X.3) is the three different visit/surveys I conducted at each site.
 
 tmp <- as.matrix(OPHB[ , 1:9])  # Subset detection columns
 S <- nrow(tmp)                  # Number of sites
@@ -114,8 +116,7 @@ outNut <- jags(
 
 # ---------------------------------------------------------------
 # Notes:
-# - Increasing n.iter improves precision but increases computation time.
+# - Increasing n.iter improves precision but increases computation time. I used 1,000,000 and it took me awhile to process.
+# With lower computer power, it'll take even longer.
 # - You can view results using: print(outNut) or summary(outNut)
-# - Consider using traceplots and Gelman diagnostics for convergence checking
-#   e.g., traceplot(outNut), gelman.diag(outNut)
 # ---------------------------------------------------------------
